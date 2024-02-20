@@ -75,12 +75,29 @@ def evaluate_policy(
     episode_rewards = []
     episode_lengths = []
 
+    step_penalties = []
+    action_penalties = []
+    crash_penalties = []
+    distance_rewards = []
+    obstacle_penalties = []
+    goal_rewards = []
+    total_rewards = []
+
     episode_counts = np.zeros(n_envs, dtype="int")
     # Divides episodes among different sub environments in the vector as evenly as possible
     episode_count_targets = np.array([(n_eval_episodes + i) // n_envs for i in range(n_envs)], dtype="int")
 
     current_rewards = np.zeros(n_envs)
     current_lengths = np.zeros(n_envs, dtype="int")
+
+    current_step_penalties = []
+    current_action_penalties = []
+    current_crash_penalties = []
+    current_distance_rewards = []
+    current_obstacle_penalties = []
+    current_goal_rewards = []
+    current_total_rewards = []
+
     observations = env.reset()
     states = None
     episode_starts = np.ones((env.num_envs,), dtype=bool)
@@ -94,6 +111,13 @@ def evaluate_policy(
         new_observations, rewards, dones, infos = env.step(actions)
         current_rewards += rewards
         current_lengths += 1
+        # current_step_penalties += np.array([infos[i]['step_pen'] for i in range(len(dones))])
+        # current_action_penalties += np.array([infos[i]['action_pen'] for i in range(len(dones))])
+        # current_crash_penalties += np.array([infos[i]['crash_pen'] for i in range(len(dones))])
+        # current_distance_rewards += np.array([infos[i]['distance_rew'] for i in range(len(dones))])
+        # current_obstacle_penalties += np.array([infos[i]['obstacle_pen'] for i in range(len(dones))])
+        # current_goal_rewards += np.array([infos[i]['goal_rew'] for i in range(len(dones))])
+        # current_total_rewards += np.array([infos[i]['total_rew'] for i in range(len(dones))])
         for i in range(n_envs):
             if episode_counts[i] < episode_count_targets[i]:
                 # unpack values so that the callback can access the local variables
@@ -116,14 +140,35 @@ def evaluate_policy(
                             # has been wrapped with it. Use those rewards instead.
                             episode_rewards.append(info["episode"]["r"])
                             episode_lengths.append(info["episode"]["l"])
+                            step_penalties.append(info["episode"]["step_pen"])
+                            action_penalties.append(info["episode"]["action_pen"])
+                            crash_penalties.append(info["episode"]["crash_pen"])
+                            obstacle_penalties.append(info["episode"]["obstacle_pen"])
+                            distance_rewards.append(info["episode"]["distance_rew"])
+                            goal_rewards.append(info["episode"]["goal_rew"])
+                            total_rewards.append(info["episode"]["total_rew"])
                             # Only increment at the real end of an episode
                             episode_counts[i] += 1
                     else:
                         episode_rewards.append(current_rewards[i])
                         episode_lengths.append(current_lengths[i])
+                        step_penalties.append(current_step_penalties[i])
+                        action_penalties.append(current_action_penalties[i])
+                        crash_penalties.append(current_crash_penalties[i])
+                        obstacle_penalties.append(current_obstacle_penalties[i])
+                        distance_rewards.append(current_distance_rewards[i])
+                        goal_rewards.append(current_goal_rewards[i])
+                        total_rewards.append(current_total_rewards[i])
                         episode_counts[i] += 1
                     current_rewards[i] = 0
                     current_lengths[i] = 0
+                    # current_step_penalties[i] = 0
+                    # current_action_penalties[i] = 0
+                    # current_crash_penalties[i] = 0
+                    # current_obstacle_penalties[i] = 0
+                    # current_distance_rewards[i] = 0
+                    # current_goal_rewards[i] = 0
+                    # current_total_rewards[i] = 0
 
         observations = new_observations
 
@@ -135,5 +180,8 @@ def evaluate_policy(
     if reward_threshold is not None:
         assert mean_reward > reward_threshold, "Mean reward below threshold: " f"{mean_reward:.2f} < {reward_threshold:.2f}"
     if return_episode_rewards:
-        return episode_rewards, episode_lengths
+        # return episode_rewards, episode_lengths
+        return [dict(zip(["episode_rewards", "step_penalties", "action_penalties", "crash_penalties",
+                      "obstacle_penalties", "distance_rewards", "goal_rewards", "total_rewards"], 
+                      [episode_rewards, step_penalties, action_penalties,  crash_penalties, obstacle_penalties, distance_rewards, goal_rewards, total_rewards]))], episode_lengths
     return mean_reward, std_reward

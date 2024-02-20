@@ -8,7 +8,7 @@ from gymnasium import spaces
 
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.buffers import DictRolloutBuffer, RolloutBuffer
-from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.policies import ActorCriticPolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import obs_as_tensor, safe_mean
@@ -273,6 +273,9 @@ class OnPolicyAlgorithm(BaseAlgorithm):
 
         assert self.env is not None
 
+        success_rates = []
+        threshold = 0.6
+        cold_start = True
         while self.num_timesteps < total_timesteps:
             continue_training = self.collect_rollouts(self.env, callback, self.rollout_buffer, n_rollout_steps=self.n_steps)
 
@@ -297,6 +300,38 @@ class OnPolicyAlgorithm(BaseAlgorithm):
                 self.logger.dump(step=self.num_timesteps)
 
             self.train()
+
+            #[By LeakyCauldron]#############################
+            if isinstance(callback, EvalCallback):
+                success_rate = callback.success_rate
+                if cold_start and success_rate > 0.5:
+                    cold_start = False 
+                if not cold_start:
+                    success_rates.append(success_rate)
+                if len(success_rates) > 10:
+                    success_rates= success_rates[1:]
+                if len(success_rates) > 0:
+                    current_success_rate = sum(success_rates) / len(success_rates) 
+                else:
+                    current_success_rate = 0
+                if len(success_rates) == 10 and  current_success_rate >= threshold:
+                    success_rates = success_rates[5:]
+                    threshold = min(0.9, threshold+0.05)
+                    self.env.set_options([{"update_curriculum_params": True} for _ in range(self.env.num_envs)])
+                    callback.eval_env.set_options([{"update_curriculum_params": True} for _ in range(self.env.num_envs)])
+                    self._last_obs = self.env.reset()
+                    callback.eval_env.reset()
+                    self._last_episode_starts =  np.array(np.zeros([self.env.num_envs]), dtype=bool)
+                    reset_info = self.env.reset_infos[0]
+                    if reset_info:
+                        self.logger.record("curriculum/current_success_rate", current_success_rate)#, exclude="tensorboard")
+                        self.logger.record("curriculum/current_threshold", threshold)#, exclude="tensorboard")
+                        self.logger.record("curriculum/curriculum_reach_goal_distance", reset_info['curriculum_reach_goal_distance'])# , exclude="tensorboard")
+                        self.logger.record("curriculum/curriculum_min_init_distance", reset_info['curriculum_min_init_distance'])#, exclude="tensorboard")
+                        self.logger.record("curriculum/curriculum_map_size", reset_info['curriculum_map_size'])#, exclude="tensorboard")
+                        self.logger.record("curriculum/curriculum_height", reset_info['curriculum_height'])#, exclude="tensorboard")
+                        self.logger.record("curriculum/last_updated_timestep", self.num_timesteps)#, exclude="tensorboard")
+                    success_rate = 0.0
 
         callback.on_training_end()
 

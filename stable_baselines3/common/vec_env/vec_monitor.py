@@ -65,30 +65,75 @@ class VecMonitor(VecEnvWrapper):
         self.info_keywords = info_keywords
         self.episode_returns = np.zeros(self.num_envs, dtype=np.float32)
         self.episode_lengths = np.zeros(self.num_envs, dtype=np.int32)
+        self.episode_step_penalties = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_action_penalties = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_crash_penalties = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_obstacle_penalties = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_distance_rewards = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_goal_rewards = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_total_rewards = np.zeros(self.num_envs, dtype=np.float32)
 
     def reset(self) -> VecEnvObs:
         obs = self.venv.reset()
         self.episode_returns = np.zeros(self.num_envs, dtype=np.float32)
         self.episode_lengths = np.zeros(self.num_envs, dtype=np.int32)
+        self.episode_step_penalties = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_action_penalties = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_crash_penalties = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_obstacle_penalties = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_distance_rewards = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_goal_rewards = np.zeros(self.num_envs, dtype=np.float32)
+        self.episode_total_rewards = np.zeros(self.num_envs, dtype=np.float32)
+        self.reset_infos = self.venv.reset_infos
         return obs
 
     def step_wait(self) -> VecEnvStepReturn:
         obs, rewards, dones, infos = self.venv.step_wait()
         self.episode_returns += rewards
         self.episode_lengths += 1
+        self.episode_step_penalties += np.array([infos[i]["step_pen"] for i in range(len(infos))])
+        self.episode_action_penalties += np.array([infos[i]["action_pen"] for i in range(len(infos))])
+        self.episode_crash_penalties += np.array([infos[i]["crash_pen"] for i in range(len(infos))])
+        self.episode_obstacle_penalties += np.array([infos[i]["obstacle_pen"] for i in range(len(infos))])
+        self.episode_distance_rewards += np.array([infos[i]["distance_rew"] for i in range(len(infos))])
+        self.episode_goal_rewards += np.array([infos[i]["goal_rew"] for i in range(len(infos))])
+        self.episode_total_rewards += np.array([infos[i]["total_rew"] for i in range(len(infos))])
+        
         new_infos = list(infos[:])
         for i in range(len(dones)):
             if dones[i]:
                 info = infos[i].copy()
                 episode_return = self.episode_returns[i]
                 episode_length = self.episode_lengths[i]
-                episode_info = {"r": episode_return, "l": episode_length, "t": round(time.time() - self.t_start, 6)}
+                episode_step_penalty = self.episode_step_penalties[i]
+                episode_action_penalty = self.episode_action_penalties[i]
+                episode_crash_penalty = self.episode_crash_penalties[i]
+                episode_obstacle_penalty = self.episode_obstacle_penalties[i]
+                episode_distance_reward = self.episode_distance_rewards[i]
+                episode_goal_reward = self.episode_goal_rewards[i]
+                episode_total_reward = self.episode_total_rewards[i]
+                episode_info = {"r": episode_return, "l": episode_length, 
+                                "step_pen": episode_step_penalty, 
+                                 "action_pen": episode_action_penalty, 
+                                 "crash_pen": episode_crash_penalty, 
+                                 "obstacle_pen": episode_obstacle_penalty,
+                                 "distance_rew": episode_distance_reward,
+                                 "goal_rew": episode_goal_reward,
+                                 "total_rew": episode_total_reward,
+                                 "t": round(time.time() - self.t_start, 6)}
                 for key in self.info_keywords:
                     episode_info[key] = info[key]
                 info["episode"] = episode_info
                 self.episode_count += 1
                 self.episode_returns[i] = 0
                 self.episode_lengths[i] = 0
+                self.episode_step_penalties[i] = 0
+                self.episode_action_penalties[i] = 0
+                self.episode_crash_penalties[i] = 0
+                self.episode_obstacle_penalties[i] = 0
+                self.episode_distance_rewards[i] = 0
+                self.episode_goal_rewards[i] = 0
+                self.episode_total_rewards[i] = 0
                 if self.results_writer:
                     self.results_writer.write_row(episode_info)
                 new_infos[i] = info

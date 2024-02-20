@@ -377,7 +377,8 @@ class EvalCallback(EventCallback):
         warn: bool = True,
     ):
         super().__init__(callback_after_eval, verbose=verbose)
-
+         #[By leakycauldron] ##############################
+        self.success_rate = 0
         self.callback_on_new_best = callback_on_new_best
         if self.callback_on_new_best is not None:
             # Give access to the parent
@@ -402,6 +403,13 @@ class EvalCallback(EventCallback):
             log_path = os.path.join(log_path, "evaluations")
         self.log_path = log_path
         self.evaluations_results: List[List[float]] = []
+        self.evaluations_results_step_penalties: List[List[float]] = []
+        self.evaluations_results_action_penalties: List[List[float]] = []
+        self.evaluations_results_obstacle_penalties: List[List[float]] = []
+        self.evaluations_results_crash_penalties: List[List[float]] = []
+        self.evaluations_results_distance_rewards: List[List[float]] = []
+        self.evaluations_results_goal_rewards: List[List[float]] = []
+        self.evaluations_results_total_rewards: List[List[float]] = []
         self.evaluations_timesteps: List[int] = []
         self.evaluations_length: List[List[int]] = []
         # For computing success rate
@@ -472,7 +480,15 @@ class EvalCallback(EventCallback):
                 assert isinstance(episode_rewards, list)
                 assert isinstance(episode_lengths, list)
                 self.evaluations_timesteps.append(self.num_timesteps)
-                self.evaluations_results.append(episode_rewards)
+                self.evaluations_results.append(episode_rewards[0]['episode_rewards'])
+                self.evaluations_results_step_penalties.append(episode_rewards[0]['step_penalties'])
+                self.evaluations_results_action_penalties.append(episode_rewards[0]['action_penalties'])
+                self.evaluations_results_crash_penalties.append(episode_rewards[0]['action_penalties'])
+                self.evaluations_results_obstacle_penalties.append(episode_rewards[0]['obstacle_penalties'])
+                self.evaluations_results_distance_rewards.append(episode_rewards[0]['distance_rewards'])
+                self.evaluations_results_goal_rewards.append(episode_rewards[0]['goal_rewards'])
+                self.evaluations_results_total_rewards.append(episode_rewards[0]['total_rewards'])
+                # self.evaluations_results.append(episode_rewards)
                 self.evaluations_length.append(episode_lengths)
 
                 kwargs = {}
@@ -485,12 +501,27 @@ class EvalCallback(EventCallback):
                     self.log_path,
                     timesteps=self.evaluations_timesteps,
                     results=self.evaluations_results,
+                    results_step_penalties=self.evaluations_results_step_penalties,
+                    results_action_penalties=self.evaluations_results_action_penalties,
+                    results_crash_penalties=self.evaluations_results_crash_penalties,
+                    results_obstacle_penalties=self.evaluations_results_obstacle_penalties,
+                    distance_rewards=self.evaluations_results_distance_rewards,
+                    goal_rewards=self.evaluations_results_goal_rewards,
+                    total_rewards=self.evaluations_results_total_rewards,
                     ep_lengths=self.evaluations_length,
                     **kwargs,
                 )
 
-            mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
+            mean_reward, std_reward = np.mean(episode_rewards[0]['episode_rewards']), np.std(episode_rewards[0]['episode_rewards'])
+            # mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
             mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(episode_lengths)
+            mean_step_penalties, std_step_penalties = np.mean(episode_rewards[0]['step_penalties']), np.std(episode_rewards[0]['step_penalties'])
+            mean_action_penalties, std_action_penalties = np.mean(episode_rewards[0]['action_penalties']), np.std(episode_rewards[0]['action_penalties'])
+            mean_crash_penalties, std_crash_penalties = np.mean(episode_rewards[0]['crash_penalties']), np.std(episode_rewards[0]['crash_penalties'])
+            mean_obstacle_penalties, std_obstacle_penalties = np.mean(episode_rewards[0]['obstacle_penalties']), np.std(episode_rewards[0]['obstacle_penalties'])
+            mean_distance_rewards, std_distance_rewards = np.mean(episode_rewards[0]['distance_rewards']), np.std(episode_rewards[0]['distance_rewards'])
+            mean_goal_rewards, std_goal_rewards = np.mean(episode_rewards[0]['goal_rewards']), np.std(episode_rewards[0]['goal_rewards'])
+            mean_total_rewards, std_total_rewards = np.mean(episode_rewards[0]['total_rewards']), np.std(episode_rewards[0]['total_rewards'])
             self.last_mean_reward = float(mean_reward)
 
             if self.verbose >= 1:
@@ -499,9 +530,16 @@ class EvalCallback(EventCallback):
             # Add to current Logger
             self.logger.record("eval/mean_reward", float(mean_reward))
             self.logger.record("eval/mean_ep_length", mean_ep_length)
-
+            self.logger.record("eval/mean_step_penalties", float(mean_step_penalties))
+            self.logger.record("eval/mean_action_penalties", float(mean_action_penalties))
+            self.logger.record("eval/mean_crash_penalties", float(mean_crash_penalties))
+            self.logger.record("eval/mean_obstacle_penalties", float(mean_obstacle_penalties))
+            self.logger.record("eval/mean_distance_rewards", float(mean_distance_rewards))
+            self.logger.record("eval/mean_goal_rewards", float(mean_goal_rewards))
+            self.logger.record("eval/mean_total_rewards", float(mean_total_rewards))
+            
             if len(self._is_success_buffer) > 0:
-                success_rate = np.mean(self._is_success_buffer)
+                self.success_rate = success_rate = np.mean(self._is_success_buffer)
                 if self.verbose >= 1:
                     print(f"Success rate: {100 * success_rate:.2f}%")
                 self.logger.record("eval/success_rate", success_rate)
